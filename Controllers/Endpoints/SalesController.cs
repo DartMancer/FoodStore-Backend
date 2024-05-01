@@ -16,110 +16,6 @@ namespace FoodStoreAPI.Controllers
             _context = context;
         }
 
-        // [HttpGet("today")]
-        // public IActionResult GetTodaySalesSummary()
-        // {
-        //     var startDate = DateTime.UtcNow.Date;
-        //     var endDate = startDate.AddDays(1);
-
-        //     return GetSalesSummary(startDate, endDate);
-        // }
-
-        // [HttpGet("week")]
-        // public IActionResult GetWeekSalesSummary()
-        // {
-        //     var today = DateTime.UtcNow.Date;
-        //     var startDate = today.AddDays(-7);
-        //     var endDate = today.AddDays(1);
-        //     return GetSalesSummary(startDate, endDate);
-        // }
-
-        // [HttpGet]
-        // public IActionResult GetSalesSummary(DateTime startDate, DateTime endDate)
-        // {
-        //     try
-        //     {
-        //         var salesData = _context.StoresOrders
-        //             .Where(o => o.StoreSelling!.SaleDate >= startDate && o.StoreSelling!.SaleDate < endDate)
-        //             .GroupBy(o => 1)
-        //             .Select(g => new
-        //             {
-        //                 TotalUnits = g.Sum(o => o.QuantitySold),
-        //                 TotalSales = g.Sum(o => o.SoldByPrice)
-        //             })
-        //             .FirstOrDefault();
-
-        //         if (salesData == null)
-        //         {
-        //             return NotFound("No sales data found for the given date range.");
-        //         }
-
-        //         return Ok(salesData);
-        //     }
-        //     catch (Exception ex)
-        //     {
-        //         return StatusCode(500, $"Internal server error: {ex.Message}");
-        //     }
-        // }
-        
-
-        // [HttpGet("today-hourly-sales")]
-        // public IActionResult GetTodayHourlySales()
-        // {
-        //     var today = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, DateTime.UtcNow.Day, 0, 0, 0, DateTimeKind.Utc);
-        //     var yesterday = today.AddDays(-1);
-        //     var lastWeek = today.AddDays(-7);
-
-        //     var todayData = GetHourlySales(today, today.AddDays(1));
-        //     var yesterdayData = GetHourlySales(yesterday, yesterday.AddDays(1));
-        //     var lastWeekData = GetHourlySales(lastWeek, lastWeek.AddDays(1));
-
-        //     for (int i = 0; i < 24; i++)
-        //     {
-        //         todayData[i].YesterdaySales = yesterdayData[i].YesterdaySales;
-        //         todayData[i].LastWeekSales = lastWeekData[i].LastWeekSales;
-        //     }
-
-        //     return Ok(todayData);
-        // }
-        
-
-        // private List<HourlySalesData> GetHourlySales(DateTime startDate, DateTime endDate)
-        // {
-        //     var hourlySales = _context.StoresOrders
-        //         .Where(o => o.StoreSelling!.SaleDate >= startDate && o.StoreSelling!.SaleDate < endDate)
-        //         .GroupBy(o => o.StoreSelling!.SaleDate.Hour)
-        //         .Select(g => new 
-        //         {
-        //             Hour = g.Key,
-        //             TotalSales = g.Sum(o => o.SoldByPrice * o.QuantitySold)
-        //         })
-        //         .ToList();
-
-        //     // Создаем список на 24 часа с нулевыми продажами
-        //     var result = Enumerable.Range(0, 24).Select(hour => new HourlySalesData
-        //     {
-        //         Hour = hour,
-        //         TodaySales = 0,
-        //         YesterdaySales = 0,
-        //         LastWeekSales = 0
-        //     }).ToList();
-
-        //     // Наполняем данными о продажах
-        //     hourlySales.ForEach(sale =>
-        //     {
-        //         var salesData = result.First(h => h.Hour == sale.Hour);
-        //         if (startDate == DateTime.Today)
-        //             salesData.TodaySales = sale.TotalSales;
-        //         else if (startDate == DateTime.Today.AddDays(-1))
-        //             salesData.YesterdaySales = sale.TotalSales;
-        //         else if (startDate == DateTime.Today.AddDays(-7))
-        //             salesData.LastWeekSales = sale.TotalSales;
-        //     });
-
-        //     return result;
-        // }
-
         [HttpGet("daily-sales-summary")]
         public async Task<IActionResult> GetDailySales()
         {
@@ -184,28 +80,40 @@ namespace FoodStoreAPI.Controllers
         [HttpGet("weekly-sales-summary")]
         public async Task<IActionResult> GetWeeklySales()
         {
-            var culture = new CultureInfo("ru-RU");
-            var startOfWeek = DateTime.UtcNow.Date.AddDays(-(int)DateTime.UtcNow.DayOfWeek + 1);
-            var endOfWeek = startOfWeek.AddDays(-7);
+            var today = DateTime.UtcNow.Date;
+            var startOfCurrentWeek = today.AddDays(-6);
+            var startOfLastWeek = today.AddDays(-13);
+            var endOfLastWeek = today.AddDays(-7);
 
-            var weeklySummary = await GetWeeklySalesTotal(startOfWeek, endOfWeek);
-            var dailySales = await GetDailySales(startOfWeek, endOfWeek);
+            var weeklySummary = await GetWeeklySalesTotal(startOfCurrentWeek, today);
+            var dailySalesThisWeek = await GetDailySales(startOfCurrentWeek, today);
+            var dailySalesLastWeek = await GetDailySales(startOfLastWeek, endOfLastWeek);
+
+            Console.WriteLine(today);
+            Console.WriteLine(startOfCurrentWeek);
+            Console.WriteLine(startOfLastWeek);
+            Console.WriteLine(endOfLastWeek);
 
             var orderedDays = GetOrderedWeekDays();
 
             var response = new WeeklySalesResponse
             {
-                WeeklySummary = weeklySummary,
+                WeeklySummary = new WeeklySalesSummary
+                {
+                    TotalSales = weeklySummary.TotalSales,
+                    TotalUnits = weeklySummary.TotalUnits
+                },
                 DailySales = orderedDays.Select(day => new DailySalesData
                 {
                     Day = day,
-                    ThisWeek = dailySales.FirstOrDefault(d => culture.DateTimeFormat.GetAbbreviatedDayName((DayOfWeek)Enum.Parse(typeof(DayOfWeek), d.Day!)) == day)?.ThisWeek ?? 0,
-                    LastWeek = dailySales.FirstOrDefault(d => culture.DateTimeFormat.GetAbbreviatedDayName((DayOfWeek)Enum.Parse(typeof(DayOfWeek), d.Day!)) == day)?.LastWeek ?? 0
+                    ThisWeek = dailySalesThisWeek.FirstOrDefault(d => d.Day == day)?.ThisWeek ?? 0,
+                    LastWeek = dailySalesLastWeek.FirstOrDefault(d => d.Day == day)?.LastWeek ?? 0
                 }).ToList()
             };
 
             return Ok(response);
         }
+
 
         private async Task<WeeklySalesSummary> GetWeeklySalesTotal(DateTime startDate, DateTime endDate)
         {
@@ -222,28 +130,27 @@ namespace FoodStoreAPI.Controllers
             return summary;
         }
 
-        private async Task<List<DailySalesData>> GetDailySales(DateTime startOfWeek, DateTime endOfWeek)
+        private async Task<List<DailySalesData>> GetDailySales(DateTime startDate, DateTime endDate)
         {
+            var cultureInfo = new CultureInfo("ru-RU");
+
             var sales = await _context.StoresOrders
                 .Include(o => o.StoreSelling)
-                .Where(o => o.StoreSelling!.SaleDate >= startOfWeek.AddDays(-7) && o.StoreSelling.SaleDate < endOfWeek)
+                .Where(o => o.StoreSelling!.SaleDate >= startDate && o.StoreSelling.SaleDate < endDate)
                 .ToListAsync();
 
             var dailySales = sales.GroupBy(o => o.StoreSelling!.SaleDate.DayOfWeek)
                 .Select(g => new DailySalesData
                 {
-                    Day = g.Key.ToString(),
-                    ThisWeek = g
-                        .Where(x => x.StoreSelling!.SaleDate >= startOfWeek && x.StoreSelling.SaleDate < endOfWeek)
-                        .Sum(x => x.SoldByPrice),
-                    LastWeek = g
-                        .Where(x => x.StoreSelling!.SaleDate >= startOfWeek.AddDays(-7) && x.StoreSelling.SaleDate < startOfWeek)
-                        .Sum(x => x.SoldByPrice)
+                    Day = cultureInfo.DateTimeFormat.GetAbbreviatedDayName(g.Key),
+                    ThisWeek = g.Sum(x => x.SoldByPrice),
+                    LastWeek = g.Sum(x => x.SoldByPrice)
                 })
                 .ToList();
 
             return dailySales;
         }
+
 
         private List<string> GetOrderedWeekDays()
         {
